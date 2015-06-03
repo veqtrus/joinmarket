@@ -63,10 +63,10 @@ class CoinJoinOrder(object):
 			except ValueError as e:
 				debug("Failed to parse multisig keys, "+e)
 				return False
-			if M not in range(1,15):
+			if M not in range(1, 15):
 				debug("Invalid M for M of N multisig: "+str(M))
 				return False
-			if len(pubkeys) not in range(3,17):
+			if len(pubkeys) not in range(1, 15):
 				debug("Invalid number of pubkeys for multisig: "+str(M))
 				return False
 		self.i_utxo_pubkeys = pubkeys
