@@ -316,6 +316,16 @@ class CoinJoinTX(object):
             tx = self.sign_tx(tx, index, self.wallet.get_key_from_addr(addr))
         self.latest_tx = btc.deserialize(tx)
 
+        inputs = [inn['outpoint']['hash'] + ':' + str(inn['outpoint']['index'])
+            for inn in self.latest_tx['ins']]
+        utxo_data = jm_single().bc_interface.query_utxo_set(inputs)
+        if None in utxo_data:
+            log.debug(('WARNING ERROR inputs to tx unconfirmed or already spent. '
+                       'inputs={}').format(pprint.pformat(utxo_data)))
+            log.debug(pprint.pformat(inputs))
+        else:
+            log.debug('all transaction inputs seem normal')
+
     def push(self, txd):
         tx = btc.serialize(txd)
         log.debug('\n' + tx)
