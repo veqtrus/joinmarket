@@ -6,12 +6,13 @@ import os
 import time
 import abc
 from optparse import OptionParser
+from getpass import getpass
 
 from joinmarket import Maker, IRCMessageChannel, MessageChannelCollection
 from joinmarket import BlockrInterface
 from joinmarket import jm_single, get_network, load_program_config
 from joinmarket import get_log, calc_cj_fee, debug_dump_object
-from joinmarket import Wallet, sync_wallet
+from joinmarket import Wallet, BitcoinCoreWallet, sync_wallet
 from joinmarket import get_irc_mchannels
 
 log = get_log()
@@ -145,8 +146,11 @@ def ygmain(ygclass, txfee=1000, cjfee_a=200, cjfee_r=0.002, ordertype='reloffer'
         if ret[0] != 'y':
             return
 
-    wallet = Wallet(seed, max_mix_depth=MAX_MIX_DEPTH, gaplimit=gaplimit)
-    sync_wallet(wallet, fast=options.fastsync)
+    if seed == '*':
+        wallet_passwd = getpass('\nWallet password: ')
+    wallet = BitcoinCoreWallet(None, wallet_passwd) if seed == '*' else Wallet(seed, max_mix_depth=MAX_MIX_DEPTH, gaplimit=gaplimit)
+    if seed != '*':
+        sync_wallet(wallet, fast=options.fastsync)
 
     mcs = [IRCMessageChannel(c, realname='btcint=' + jm_single().config.get(
                                  "BLOCKCHAIN", "blockchain_source"),

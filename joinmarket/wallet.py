@@ -322,45 +322,50 @@ class Wallet(AbstractWallet):
 
 
 class BitcoinCoreWallet(AbstractWallet):
-    def __init__(self, fromaccount):
+    address_label_prefix = 'joinmarket-mixdepth-'
+
+    def __init__(self, fromaccount, password=None):
         super(BitcoinCoreWallet, self).__init__()
         if not isinstance(jm_single().bc_interface,
                           BitcoinCoreInterface):
             raise RuntimeError('Bitcoin Core wallet can only be used when '
                                'blockchain interface is BitcoinCoreInterface')
         self.fromaccount = fromaccount
-        self.max_mix_depth = 1
+        self.password = password
 
     def get_key_from_addr(self, addr):
-        self.ensure_wallet_unlocked()
+        self.ensure_wallet_unlocked(self.password, True)
         wifkey = jm_single().bc_interface.rpc('dumpprivkey', [addr])
         return btc.from_wif_privkey(wifkey, vbyte=get_p2pk_vbyte())
 
     def get_utxos_by_mixdepth(self):
         unspent_list = jm_single().bc_interface.rpc('listunspent', [])
-        result = {0: {}}
+        result = {}
         for u in unspent_list:
             if not u['spendable']:
                 continue
-            if self.fromaccount and (
-                        ('account' not in u) or u['account'] !=
-                        self.fromaccount):
-                continue
-            result[0][u['txid'] + ':' + str(u['vout'])] = {
+            mixdepth = (int(u['account'][len(self.address_label_prefix):]) if u.get('account', '').startswith(self.address_label_prefix)
+                else 0) if self.fromaccount is None else 0
+            result[mixdepth] = result.get(mixdepth, {})
+            result[mixdepth][u['txid'] + ':' + str(u['vout'])] = {
                 'address': u['address'],
                 'value': int(Decimal(str(u['amount'])) * Decimal('1e8'))}
         return result
 
     def get_internal_addr(self, mixing_depth):
-        return jm_single().bc_interface.rpc('getrawchangeaddress', [])
+        self.ensure_wallet_unlocked(self.password, True)
+        address = jm_single().bc_interface.rpc('getrawchangeaddress', ['legacy'])
+        if self.fromaccount is None:
+            jm_single().bc_interface.rpc('setaccount', [self.address_label_prefix + str(mixing_depth)])
+        return address
 
     @staticmethod
-    def ensure_wallet_unlocked():
+    def ensure_wallet_unlocked(password=None, force=False):
         wallet_info = jm_single().bc_interface.rpc('getwalletinfo', [])
-        if 'unlocked_until' in wallet_info and wallet_info[
-            'unlocked_until'] <= 0:
+        if force or ('unlocked_until' in wallet_info and wallet_info['unlocked_until'] <= 0):
             while True:
-                password = getpass(
+                if password is None:
+                    password = getpass(
                         'Enter passphrase to unlock wallet: ')
                 if password == '':
                     raise RuntimeError('Aborting wallet unlock')
@@ -370,6 +375,7 @@ class BitcoinCoreWallet(AbstractWallet):
                             'walletpassphrase', [password, 10])
                     break
                 except jm_single().JsonRpcError as exc:
+                    password = None
                     if exc.code != -14:
                         raise exc
                         # Wrong passphrase, try again.
